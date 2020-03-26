@@ -37,5 +37,9 @@ rdd = rdd.map(lambda fields: [fields[2], lower_clean_string(base64.b64decode(fie
 tokens = rdd.map(lambda line: [line[0], line[1].split(" ")])    # Tokenize the reviews
 tokens = tokens.map(lambda x: [x[0], filter(None, x[1])])       # Filter out empty strings
 
-for i in tokens.take(10):
-    print(i)
+# Filter out stopwords:
+file = open('stopwords.txt', 'r')
+stop_words = file.read().split('\n')
+
+#for i in tokens.take(10):
+#    print(i)
