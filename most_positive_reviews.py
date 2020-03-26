@@ -41,5 +41,8 @@ tokens = tokens.map(lambda x: [x[0], filter(None, x[1])])       # Filter out emp
 file = open('stopwords.txt', 'r')
 stop_words = file.read().split('\n')
 
-#for i in tokens.take(10):
-#    print(i)
+# tokens = tokens.map(lambda x: [x[0], x[1].filter(lambda y: y not in stop_words)])
+# Need to fix line above
+
+for i in tokens.take(2):
+    print(i)
