@@ -17,8 +17,6 @@ header = rdd.first()
 rdd = rdd.filter(lambda line: line != header)
 
 
-rdd = rdd.map(lambda fields: (fields[2], (base64.b64decode(fields[3]))))
-tokenize = rdd.flatMap(lambda line: line.split(" "))
-
-
+rdd = rdd.map(lambda fields: [fields[2], base64.b64decode(fields[3]).lower()])
+tokenize = rdd.flatMap(lambda line: [line[0], line[1].split(" ")])
 
