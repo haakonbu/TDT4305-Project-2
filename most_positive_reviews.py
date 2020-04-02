@@ -1,21 +1,45 @@
 from pyspark import SparkContext, SparkConf
 import base64
-import re
+from operator import add
 
 sparkConf = SparkConf().setAppName("Yelp").setMaster("local")
 sc = SparkContext(conf=sparkConf)
 
-folder_name = "./data/"
-input_reviewers = "yelp_top_reviewers_with_reviews.csv.gz"
-output_file = "result2.tsv"
+file = open('stopwords.txt', 'r')
+stop_words = file.read().split('\n')
 
-# Create RDD object from .gz-file
-reviewersRDD = sc.textFile(folder_name + input_reviewers)
-rdd = reviewersRDD.map(lambda line: line.split('\t'))
 
-# Filter out header
-header = rdd.first()
-rdd = rdd.filter(lambda line: line != header)
+def find_top_k_most_positive_reviews(folder_name, input_file, k):
+    folder_name = folder_name
+    input_file = input_file
+    output_file = "results.tsv"
+
+    # Create RDD object from .gz-file
+    reviewersRDD = sc.textFile(folder_name + input_file)
+    rdd = reviewersRDD.map(lambda line: line.split('\t'))
+
+    # Filter out header
+    header = rdd.first()
+    rdd = rdd.filter(lambda line: line != header)
+
+    rdd = rdd.map(lambda fields: [fields[2], lower_clean_string(base64.b64decode(fields[3]))])
+    tokens = rdd.map(lambda line: [line[0], line[1].split(" ")])  # Tokenize the reviews
+    tokens = tokens.map(lambda x: [x[0], filter(None, x[1])])  # Filter out empty strings
+
+    tokens = tokens.map(lambda x: [x[0], filter(filter_out_stopwords, x[1])])  # Filter out stop words
+    tokens = tokens.map(lambda x: [x[0], filter(filter_out_length_of_one, x[1])])  # Filter out short words
+
+    # load AFINN-111 into dictionary as described in README
+    afinn = dict(map(lambda (k, v): (k, int(v)),
+                     [line.split('\t') for line in open("AFINN.txt")]))
+
+    # Example on how to use: sum(map(lambda word: afinn.get(word, 0), "Rainy day but still in a good mood".lower().split()))
+    scores = tokens.map(lambda rev: [rev[0], sum(map(lambda word: afinn.get(word, 0), rev[1]))])
+    scores = scores.reduceByKey(add)    # Sum all the values
+
+    scores.saveAsTextFile(folder_name + output_file)
+
+    return scores.takeOrdered(k, key=lambda x: -x[1])
 
 
 def lower_clean_string(string):
@@ -33,40 +57,20 @@ def lower_clean_string(string):
     return lowercase_string
 
 
-rdd = rdd.map(lambda fields: [fields[2], lower_clean_string(base64.b64decode(fields[3]))])
-tokens = rdd.map(lambda line: [line[0], line[1].split(" ")])    # Tokenize the reviews
-tokens = tokens.map(lambda x: [x[0], filter(None, x[1])])       # Filter out empty strings
-
-# Filter out stopwords:
-file = open('stopwords.txt', 'r')
-stop_words = file.read().split('\n')
-
-tokens = tokens.map(lambda x: [x[0], (sc.parallelize(x[1])).filter(lambda y: y not in stop_words)])
-# Need to fix line above. Tried to make an rdd of the second column with sc.parallelize
-
-for i in tokens.take(2):
-    print(i)
+def filter_out_stopwords(word):
+    if word not in stop_words:
+        return True
+    return False
 
 
-#load AFINN-111 into dictionary as described in README
-afinn = dict(map(lambda (k,v): (k,int(v)),
-                     [ line.split('\t') for line in open("AFINN-111.txt") ]))
+def filter_out_length_of_one(word):
+    if len(word) > 1:
+        return True
+    return False
 
 
-# Example on how to use: sum(map(lambda word: afinn.get(word, 0), "Rainy day but still in a good mood".lower().split()))
+if __name__ == "__main__":
+    top_reviews = find_top_k_most_positive_reviews("./data/", "yelp_top_reviewers_with_reviews.csv.gz", 10)
 
-scores = tokens.map(lambda rev: [rev[0], sum(map(lambda word: afinn.get(word, 0), rev[1]))])
-
-
-
-# ALT 2. comment out from line 35 to use this
-# use flatmap for removing stop words
-"""
-rdd = rdd.map(lambda fields: [fields[2], lower_clean_string(base64.b64decode(fields[3])), 'linesplitter'])
-rdd = rdd.flatMap(lambda line: line.split(" "))
-filtered = rdd.filter(lambda y: y not in stop_words)
-mapped = filtered.map(lambda line: line.split('linesplitter'))
-
-scores = tokens.map(lambda rev: [rev[0], sum(map(lambda word: afinn.get(word, 0), rev[1:]))])
-
-"""
+    for i in top_reviews:
+        print i
