@@ -33,13 +33,12 @@ def find_top_k_most_positive_reviews(folder_name, input_file, k):
     afinn = dict(map(lambda (k, v): (k, int(v)),
                      [line.split('\t') for line in open("AFINN.txt")]))
 
-    # Example on how to use: sum(map(lambda word: afinn.get(word, 0), "Rainy day but still in a good mood".lower().split()))
     scores = tokens.map(lambda rev: [rev[0], sum(map(lambda word: afinn.get(word, 0), rev[1]))])
     scores = scores.reduceByKey(add)    # Sum all the values
+    scores = scores.takeOrdered(k, key=lambda x: -x[1])
+    scores.coalesce(1).saveAsTextFile(folder_name + output_file)
 
-    scores.saveAsTextFile(folder_name + output_file)
-
-    return scores.takeOrdered(k, key=lambda x: -x[1])
+    return scores
 
 
 def lower_clean_string(string):
@@ -47,7 +46,7 @@ def lower_clean_string(string):
     Function used to make string lowercase filter out punctuation
 
     :param string: Text string to strip clean and make lower case.
-    :return:
+    :return: String in lowercase with all punctuation stripped.
     """
 
     punctuation = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~[\n]'
@@ -58,12 +57,24 @@ def lower_clean_string(string):
 
 
 def filter_out_stopwords(word):
+    """
+    Filters out all stopwords, funciton is used with stripped and lowercase tokens.
+
+    :param word: Input word
+    :return: None if word in stop_words, else the original word
+    """
     if word not in stop_words:
         return True
     return False
 
 
 def filter_out_length_of_one(word):
+    """
+    Filters out all words of length 1
+
+    :param word: Input word
+    :return: None if word is of length 1, else the original word
+    """
     if len(word) > 1:
         return True
     return False
@@ -72,5 +83,6 @@ def filter_out_length_of_one(word):
 if __name__ == "__main__":
     top_reviews = find_top_k_most_positive_reviews("./data/", "yelp_top_reviewers_with_reviews.csv.gz", 10)
 
+    # Prints the result as it is saved.
     for i in top_reviews:
         print i
